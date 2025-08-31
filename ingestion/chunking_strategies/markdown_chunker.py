@@ -16,7 +16,7 @@ class MarkdownChunker(BaseChunker):
     Handles code blocks to prevent misinterpreting headers within them.
     """
 
-    def __init__(self, chunk_size: int = 500, chunk_overlap: int = 100):
+    def __init__(self, chunk_size: int = 1500, chunk_overlap: int = 250):
         super().__init__(chunk_size, chunk_overlap)
         # MarkdownChunker might use GenericChunker for content between headings or very large non-heading sections
         self.generic_chunker = GenericChunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)

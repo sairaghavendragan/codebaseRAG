@@ -17,7 +17,7 @@ class PythonChunker(BaseChunker):
     top-level statements) is chunked using the GenericChunker.
     """
 
-    def __init__(self, chunk_size: int = 500, chunk_overlap: int = 100):
+    def __init__(self, chunk_size: int = 1500, chunk_overlap: int = 250):
         super().__init__(chunk_size, chunk_overlap)
         # PythonChunker will use an internal GenericChunker for unhandled top-level code
         self.generic_chunker = GenericChunker(chunk_size=chunk_size, chunk_overlap=chunk_overlap)

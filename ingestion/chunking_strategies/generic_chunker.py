@@ -14,7 +14,7 @@ class GenericChunker(BaseChunker):
     or for top-level content not handled by semantic chunkers.
     """
 
-    def __init__(self, chunk_size: int = 500, chunk_overlap: int = 100):
+    def __init__(self, chunk_size: int = 800, chunk_overlap: int = 100):
         """
         Initializes the GenericChunker.
 
