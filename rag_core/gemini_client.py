@@ -18,8 +18,8 @@ class GeminiClient:
         # add other params here if needed
     )
     
-    def __init__(self, api_key: str):
-        self.client = genai.Client(api_key=api_key)
+    def __init__(self, google_api_key: str):
+        self.client = genai.Client(api_key=google_api_key)
     
     def generate_response(self, prompt: str) -> str:
         try:

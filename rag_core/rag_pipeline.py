@@ -16,8 +16,8 @@ class RAGPipeline:
     def __init__(
         self,
         chroma_manager: Any,
-        gemini_generate_response_func: Callable[[str], str],
-        prompt_builder_func: Callable[[str, List[Dict]], str]
+        gemini_client: Any,
+        prompt_builder: Any
     ):
         """
         Initializes the RAG pipeline with dependencies.
@@ -28,8 +28,8 @@ class RAGPipeline:
             prompt_builder_func: Function to construct prompt from query and chunks.
         """
         self.chroma_manager = chroma_manager
-        self.generate_response = gemini_generate_response_func
-        self.build_prompt = prompt_builder_func
+        self.gemini_client = gemini_client
+        self.prompt_builder = prompt_builder
 
     def extract_sources_from_response(self, response_text: str) -> List[Dict[str, Any]]:
         """
@@ -127,14 +127,14 @@ class RAGPipeline:
 
         # Step 3: Build prompt
         try:
-            prompt = self.build_prompt(query, context_chunks)
+            prompt = self.prompt_builder.build_rag_prompt(query, context_chunks)
         except Exception as e:
             logging.error(f"Prompt building failed: {e}")
             return {'query': query, 'answer': f"Prompt building failed: {e}", 'sources': []}
 
         # Step 4: Generate response
         try:
-            response_text = self.generate_response(prompt)
+            response_text = self.gemini_client.generate_response(prompt)
         except RuntimeError as e:
             logging.error(f"LLM generation error: {e}")
             return {'query': query, 'answer': f"LLM generation error: {e}", 'sources': []}

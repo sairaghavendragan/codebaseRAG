@@ -1,0 +1,9 @@
+gitingest
+chromadb
+google-genai
+python-dotenv
+pyngrok
+fastapi
+pydantic-settings
+uvicorn
+pydantic

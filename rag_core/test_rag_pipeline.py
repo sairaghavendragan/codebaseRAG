@@ -15,8 +15,7 @@ from ingestion.repo_processer import process_repository_for_rag # NEW IMPORT!
 from vector_store.chroma_manager import ChromaManager
 from rag_core.gemini_client import GeminiClient
 from rag_core.prompt_builder import PromptBuilder
-from rag_core.rag_pipeline import run_rag_query
- 
+from rag_core.rag_pipeline import RAGPipeline
 
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -31,11 +30,6 @@ TEST_GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") # Load from .env
 # RAG specific parameters
 TEST_TOP_K_RETRIEVAL = 6  # Increase slightly to get more context
 TEST_CONTEXT_EXPANSION_FACTOR = 0  # Not yet implemented
-
-def build_prompt_wrapper(query, chunks):
-    # Using the PromptBuilder class as is (or convert to functional if you want)
-    prompt_builder = PromptBuilder()
-    return prompt_builder.build_rag_prompt(query, chunks)
 
 def run_rag_pipeline_test():
     print(f"--- Running Phase 4 RAG Pipeline Test ---")
@@ -83,15 +77,19 @@ def run_rag_pipeline_test():
         user_query = "How does one use reminder function."
         print(f"User Query: '{user_query}'")
 
-        rag_result = run_rag_query(
+        rag_pipeline = RAGPipeline(
+            chroma_manager=chroma_manager,
+            gemini_client=gemini_client,
+            prompt_builder=PromptBuilder()
+        )
+
+        rag_result = rag_pipeline.run(
             repo_name=TEST_REPO_NAME,
             query=user_query,
-            chroma_manager=chroma_manager,
-            gemini_generate_response_func=gemini_client.generate_response,
-            prompt_builder_func=build_prompt_wrapper,
             top_k_retrieval=TEST_TOP_K_RETRIEVAL,
             context_expansion_factor=TEST_CONTEXT_EXPANSION_FACTOR
         )
+
 
         print("\n--- RAG Pipeline Result ---")
         print(f"Query: {rag_result['query']}")
