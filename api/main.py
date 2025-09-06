@@ -6,12 +6,11 @@ import logging
 from contextlib import asynccontextmanager  # Changed from asynccontextmanager
 from typing import List, Dict, Any, Optional
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status,BackgroundTasks
 from pydantic import BaseModel, Field
 import uvicorn
 
-# Add the project root to sys.path for module imports
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+ 
 
 # Import our custom modules
 from config.settings import AppSettings
@@ -119,32 +118,44 @@ class QueryCodebaseResponse(BaseModel):
 
 # --- API Endpoints (all made synchronous) ---
 
-@app.post("/ingest-repo", response_model=IngestRepoResponse, status_code=status.HTTP_202_ACCEPTED)
-def ingest_repo_endpoint(request: IngestRepoRequest):
-    logger.info(f"Received ingestion request for repo: {request.repo_url} (name: {request.repo_name})")
+def background_ingest_repo(repo_url: str, repo_name: str, chroma_manager: ChromaManager):
+    logger.info(f"[Background] Starting ingestion for repo: {repo_url} (name: {repo_name})")
     try:
-        semantic_chunks = process_repository_for_rag(request.repo_url, request.repo_name)
+        semantic_chunks = process_repository_for_rag(repo_url, repo_name)
 
         if not semantic_chunks:
-            logger.warning(f"No semantic chunks generated for {request.repo_name}.")
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No usable code or documentation found in the repository, or an error occurred during chunking."
-            )
+            logger.warning(f"[Background] No semantic chunks generated for {repo_name}.")
+            return
 
-        app.state.chroma_manager.add_chunks(request.repo_name, semantic_chunks)
+        chroma_manager.add_chunks(repo_name, semantic_chunks)
+        logger.info(f"[Background] Successfully ingested {len(semantic_chunks)} chunks for repo: {repo_name}.")
+    except Exception as e:
+        logger.error(f"[Background] Error during ingestion for {repo_url}: {e}", exc_info=True)
 
-        logger.info(f"Successfully ingested {len(semantic_chunks)} chunks for repo: {request.repo_name}.")
+
+
+@app.post("/ingest-repo", response_model=IngestRepoResponse, status_code=status.HTTP_202_ACCEPTED)
+def ingest_repo_endpoint(request: IngestRepoRequest, background_tasks: BackgroundTasks):
+    logger.info(f"Received ingestion request for repo: {request.repo_url} (name: {request.repo_name})")
+    try:
+        if not hasattr(app.state, "chroma_manager"):
+            raise HTTPException(status_code=500, detail="ChromaManager not initialized.")
+
+        background_tasks.add_task(
+            background_ingest_repo,
+            repo_url=request.repo_url,
+            repo_name=request.repo_name,
+            chroma_manager=app.state.chroma_manager
+        )
+
         return IngestRepoResponse(
             status="success",
-            message="Repository ingestion completed successfully.",
+            message="Repository ingestion started.",
             repo_name=request.repo_name
         )
     except Exception as e:
-        logger.error(f"Error during ingestion for {request.repo_url}: {e}", exc_info=True)
-        if "Invalid URL" in str(e) or "Repository not found" in str(e):
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Invalid repository URL or access issue: {e}")
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Ingestion error: {e}")
+        logger.error(f"Failed to schedule background task: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to schedule ingestion: {e}")
 
 
 @app.post("/query-codebase", response_model=QueryCodebaseResponse)
