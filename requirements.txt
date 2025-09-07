@@ -94,3 +94,5 @@ websocket-client==1.8.0
 websockets==15.0.1
 win32-setctime==1.2.0
 zipp==3.23.0
+tree_sitter
+tree_sitter_language_pack

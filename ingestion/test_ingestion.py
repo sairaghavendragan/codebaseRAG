@@ -1,15 +1,14 @@
 # ingestion/test_ingestion.py (remains the same as before)
- 
 
 # --- Configuration for Testing ---
-TEST_REPO_URL = "https://github.com/sairaghavendragan/Kosha"
+TEST_REPO_URL = "https://github.com/fastmail/Squire"
 TEST_REPO_NAME = "test-fastapi-repo"
 
 # ingestion/test_ingestion.py (updated to call repo_processor)
 
 import os
 from  ingestion.repo_processer import process_repository_for_rag
- 
+
 def run_full_ingestion_test():
     print(f"--- Running Full Phase 2 Ingestion Test ---")
     print(f"Attempting to process repository: {TEST_REPO_URL}")
