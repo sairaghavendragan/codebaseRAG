@@ -12,8 +12,10 @@ class Subquestions(BaseModel):
     subquestions: List[str] = Field(
         ...,
         description="A list of specific and focused sub-questions derived from the original query and provided context. "
-                    "Generate at least 2, and up to 5 sub-questions. Ensure they are directly answerable from code documentation "
-                    "or code structure. If the original query is simple and direct, it's acceptable to generate only 1-2 focused sub-questions."
+                    "Generate at least 3, and up to 7, atomic and actionable sub-questions. Each sub-question should "
+                    "ideally focus on a single, distinct piece of information or concept that can be directly searched for. "
+                    "Ensure they are directly answerable from code documentation or code structure. "
+                    "If the original query is simple and direct, it's acceptable to generate only 1-2 highly focused sub-questions."
     )
 
 class RAGPipeline:
@@ -26,21 +28,41 @@ class RAGPipeline:
 
     # NEW: System template for generating sub-questions
     SUBQUESTION_GENERATION_SYSTEM_PROMPT = """
-You are an AI assistant tasked with breaking down a complex user query about a codebase into more specific and focused sub-questions.
+You are an AI assistant tasked with breaking down a complex user query about a codebase into more **atomic, specific, and actionable** sub-questions.
 You will be provided with the original user query and an initial set of relevant code snippets.
-Your goal is to generate 2-5 sub-questions that, if answered, would collectively provide a comprehensive answer to the original query.
-The sub-questions should be specific, actionable, and geared towards finding information within a codebase.
+Your goal is to generate 3-7 sub-questions that, if individually answered, would collectively provide a comprehensive and detailed answer to the original query.
 
 Follow these rules:
-1.  **Focus on Codebase:** The sub-questions should aim to extract information typically found in source code, documentation, or configuration files.
-2.  **Use Context:** Leverage the provided "Initial Code Context" to refine your sub-questions, making them more specific and relevant to the actual codebase content.
-3.  **Output Format:** Respond ONLY with a JSON object conforming to the following Pydantic schema:
+1.  **Atomic Focus:** Each sub-question must focus on a single, distinct piece of information or a very specific concept. Avoid combining multiple ideas into one sub-question.
+2.  **Actionable for Retrieval:** Formulate questions that can be directly used as search queries to retrieve relevant code snippets or documentation.
+3.  **Use Context:** Leverage the provided "Initial Code Context" to refine your sub-questions, making them more precise and relevant to the actual codebase content and terminology.
+4.  **Output Format:** Respond ONLY with a JSON object conforming to the following Pydantic schema:
     ```json
     {
       "subquestions": ["sub-question 1", "sub-question 2", ...]
     }
     ```
     Do NOT include any conversational text, explanations, or other formatting outside the JSON object.
+    
+**Example:**
+Original Query: "How do I set up a Python Flask application with a PostgreSQL database, and how do I handle user authentication?"
+
+Initial Code Context: [Imagine relevant Flask, SQLAlchemy, and user model snippets]
+
+Desired Sub-questions (JSON):
+```json
+{
+  "subquestions": [
+    "What are the environment variables or configuration settings for the PostgreSQL database connection in the Flask app?",
+    "Which Python library or ORM is used to interact with PostgreSQL in the Flask application?",
+    "Where is the Flask application initialized and how is the database connection configured?",
+    "What are the endpoints or routes related to user authentication (e.g., login, register)?",
+    "Which authentication method or library is used for user management (e.g., Flask-Login, JWT)?",
+    "How is a user's password hashed and verified during authentication?",
+    "Is there an example of a user model or schema definition?"
+  ]
+}
+```
 """
 
     def __init__(

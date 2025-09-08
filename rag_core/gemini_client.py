@@ -41,9 +41,7 @@ class GeminiClient:
             logging.debug(f"Gemini response (first 200 chars): {text[:200]}")
             return text
 
-        except genai.types.BlockedPromptException as e:
-            logging.error(f"Prompt was blocked due to safety filters: {e}")
-            return "I'm sorry, your request was blocked due to safety concerns."
+         
 
         except Exception as e:
             logging.error(f"Gemini API call failed: {e}", exc_info=True)
@@ -71,17 +69,16 @@ class GeminiClient:
         try:
             logging.debug(f"Sending structured prompt to Gemini (first 200 chars): {prompt[:200]}")
 
-            # Merge the existing generation config with the new structured output parameters
-            structured_config = self.GENERATION_CONFIG.to_dict() # Convert existing config to dict
-            structured_config.update({
-                "response_mime_type": response_mime_type,
-                "response_schema": response_schema,
-            })
+           
+            
 
             response = self.client.models.generate_content(
                 model=self.MODEL_NAME,
                 contents=prompt,
-                config=structured_config # Use the merged config
+                config=types.GenerateContentConfig( safety_settings=self.SAFETY_SETTINGS,
+                                                    response_mime_type=  response_mime_type,
+                                                    response_schema= response_schema,
+                                                   )  
             )
 
             if response.parsed:
@@ -91,9 +88,7 @@ class GeminiClient:
                 logging.warning(f"Gemini returned an empty or unparseable structured response for prompt: {prompt[:100]}... Raw text: {response.text}")
                 return None
 
-        except genai.types.BlockedPromptException as e:
-            logging.error(f"Structured prompt was blocked due to safety filters: {e}")
-            return None
+         
         except Exception as e:
             logging.error(f"Gemini structured API call failed: {e}", exc_info=True)
             return None
