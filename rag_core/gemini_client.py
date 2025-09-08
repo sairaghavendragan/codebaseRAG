@@ -1,6 +1,8 @@
 import logging
 from google import genai
 from google.genai import types
+from pydantic import BaseModel
+from typing import Type, Optional
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -46,3 +48,52 @@ class GeminiClient:
         except Exception as e:
             logging.error(f"Gemini API call failed: {e}", exc_info=True)
             return "I'm sorry, something went wrong while generating a response."
+    def generate_structured_response(
+        self,
+        prompt: str,
+        response_schema: Type[BaseModel],
+        response_mime_type: str = "application/json"
+    ) -> Optional[BaseModel]:
+        """
+        Generates a response from Gemini, enforcing a structured output format
+        based on a Pydantic schema.
+
+        Args:
+            prompt (str): The prompt to send to Gemini.
+            response_schema (Type[BaseModel]): The Pydantic model representing the
+                                               desired JSON structure for the response.
+            response_mime_type (str): The MIME type for the response, typically "application/json".
+
+        Returns:
+            Optional[BaseModel]: An instance of the response_schema Pydantic model if successful,
+                                 otherwise None.
+        """
+        try:
+            logging.debug(f"Sending structured prompt to Gemini (first 200 chars): {prompt[:200]}")
+
+            # Merge the existing generation config with the new structured output parameters
+            structured_config = self.GENERATION_CONFIG.to_dict() # Convert existing config to dict
+            structured_config.update({
+                "response_mime_type": response_mime_type,
+                "response_schema": response_schema,
+            })
+
+            response = self.client.models.generate_content(
+                model=self.MODEL_NAME,
+                contents=prompt,
+                config=structured_config # Use the merged config
+            )
+
+            if response.parsed:
+                logging.debug(f"Gemini structured response parsed successfully: {response.parsed}")
+                return response.parsed
+            else:
+                logging.warning(f"Gemini returned an empty or unparseable structured response for prompt: {prompt[:100]}... Raw text: {response.text}")
+                return None
+
+        except genai.types.BlockedPromptException as e:
+            logging.error(f"Structured prompt was blocked due to safety filters: {e}")
+            return None
+        except Exception as e:
+            logging.error(f"Gemini structured API call failed: {e}", exc_info=True)
+            return None

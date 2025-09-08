@@ -19,10 +19,11 @@ class AppSettings(BaseSettings):
     chroma_db_path: str = "data/chroma_db"
     embedding_model_name: str = "all-MiniLM-L6-v2"
 
+   
     # RAG Pipeline Settings
     default_top_k_retrieval: int = 3
-    # For now, context_expansion_factor is 0, but good to have as a setting
-    context_expansion_factor: int = 0 
+    context_expansion_factor: int = 0
+    use_two_pass_rag_default: bool = True  
     
     # FastAPI specific settings
     # You might want to add host/port here, but uvicorn takes them as args generally
@@ -40,6 +41,8 @@ class AppSettings(BaseSettings):
         logging.debug(f"Chroma DB Path: {self.chroma_db_path}")
         logging.debug(f"Embedding Model: {self.embedding_model_name}")
         logging.debug(f"Default Top-K Retrieval: {self.default_top_k_retrieval}")
+        logging.debug(f"Context Expansion Factor: {self.context_expansion_factor}")
+        logging.debug(f"Use Two-Pass RAG Default: {self.use_two_pass_rag_default}")
 
 # Instantiate settings once to validate on load (optional, or instantiate on app startup)
 # try:

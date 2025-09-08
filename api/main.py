@@ -104,6 +104,8 @@ class QueryCodebaseRequest(BaseModel):
     repo_name: str = Field(..., example="fastapi-repo-docs")
     query: str = Field(..., example="How do I define a path operation with a Pydantic model?")
     top_k: Optional[int] = Field(None, ge=3, description="Number of top chunks to retrieve.")
+    use_two_pass_rag: bool = Field(True, description="Whether to use the two-pass RAG strategy " \
+                                    "for enhanced query understanding and retrieval.") # NEW FIELD
 
 class SourceReference(BaseModel):
     file_path: str = Field(..., example="src/main.py")
@@ -160,7 +162,7 @@ def ingest_repo_endpoint(request: IngestRepoRequest, background_tasks: Backgroun
 
 @app.post("/query-codebase", response_model=QueryCodebaseResponse)
 def query_codebase_endpoint(request: QueryCodebaseRequest):
-    logger.info(f"Received query for repo '{request.repo_name}': '{request.query[:100]}...'")
+    logger.info(f"Received query for repo '{request.repo_name}': '{request.query[:100]}...' (Two-pass RAG: {request.use_two_pass_rag})") # Updated log
     try:
         if request.repo_name not in app.state.chroma_manager.list_collections():
             raise HTTPException(
@@ -171,7 +173,8 @@ def query_codebase_endpoint(request: QueryCodebaseRequest):
         rag_result = app.state.rag_pipeline.run(
             repo_name=request.repo_name,
             query=request.query,
-            top_k_retrieval=request.top_k
+            top_k_retrieval=request.top_k or app.state.default_top_k_retrieval,
+            use_two_pass_rag=request.use_two_pass_rag
         )
 
         if "I could not find any relevant information" in rag_result['answer']:

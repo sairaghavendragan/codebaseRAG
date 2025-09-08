@@ -1,3 +1,5 @@
+# rag_core/test_rag_pipeline.py
+
 import os
 import sys
 import shutil
@@ -11,7 +13,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 load_dotenv()
 
 # Import all necessary components
-from ingestion.repo_processer import process_repository_for_rag # NEW IMPORT!
+from ingestion.repo_processer import process_repository_for_rag
 from vector_store.chroma_manager import ChromaManager
 from rag_core.gemini_client import GeminiClient
 from rag_core.prompt_builder import PromptBuilder
@@ -30,9 +32,10 @@ TEST_GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY") # Load from .env
 # RAG specific parameters
 TEST_TOP_K_RETRIEVAL = 6  # Increase slightly to get more context
 TEST_CONTEXT_EXPANSION_FACTOR = 0  # Not yet implemented
+TEST_USE_TWO_PASS_RAG = True # NEW: Enable two-pass RAG for this test
 
 def run_rag_pipeline_test():
-    print(f"--- Running Phase 4 RAG Pipeline Test ---")
+    print(f"--- Running Phase 7 Two-Pass RAG Pipeline Test ---")
 
     if not TEST_GOOGLE_API_KEY:
         print("ERROR: GOOGLE_API_KEY not found in .env file. Please set it to run this test.")
@@ -73,9 +76,11 @@ def run_rag_pipeline_test():
     # --- Phase 4: Initialize RAG Components and Run Query ---
     print("\n--- Step 3: Initializing RAG Components and Running Query ---")
     try:
-        gemini_client = GeminiClient(api_key=TEST_GOOGLE_API_KEY)
-        user_query = "How does one use reminder function."
-        print(f"User Query: '{user_query}'")
+        gemini_client = GeminiClient(google_api_key=TEST_GOOGLE_API_KEY)
+        
+        # Updated user query for two-pass RAG
+        user_query = "How do I configure the Telegram bot for Kosha, and what are the main features of its reminder and summarization functionalities? Provide examples if available."
+        print(f"User Query (Two-Pass RAG enabled): '{user_query}'")
 
         rag_pipeline = RAGPipeline(
             chroma_manager=chroma_manager,
@@ -87,7 +92,8 @@ def run_rag_pipeline_test():
             repo_name=TEST_REPO_NAME,
             query=user_query,
             top_k_retrieval=TEST_TOP_K_RETRIEVAL,
-            context_expansion_factor=TEST_CONTEXT_EXPANSION_FACTOR
+            context_expansion_factor=TEST_CONTEXT_EXPANSION_FACTOR,
+            use_two_pass_rag=TEST_USE_TWO_PASS_RAG # NEW: Pass the boolean flag
         )
 
 
@@ -112,7 +118,7 @@ def run_rag_pipeline_test():
             shutil.rmtree(TEST_CHROMA_DB_DIR)
             print("Cleanup complete.")
 
-    print("\n--- Phase 4 RAG Pipeline Test Complete ---")
+    print("\n--- Phase 7 Two-Pass RAG Pipeline Test Complete ---")
 
 if __name__ == "__main__":
     run_rag_pipeline_test()

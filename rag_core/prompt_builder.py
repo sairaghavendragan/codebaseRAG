@@ -86,3 +86,62 @@ Based on the provided context and your instructions, please answer the user's qu
 
         logging.info(f"Final prompt built (estimated {current_tokens} tokens, {len(formatted_chunks)} chunks included).")
         return final_prompt.strip()
+    
+
+    def build_subquestion_prompt(self, original_query: str, initial_chunks: List[Dict], system_template: str) -> str:
+        """
+        Builds a prompt for Gemini to generate sub-questions, providing the original query
+        and an initial set of relevant chunks as context.
+
+        Args:
+            original_query (str): The initial user query.
+            initial_chunks (List[Dict]): A list of chunks retrieved from the first pass.
+            system_template (str): The system instructions for sub-question generation,
+                                   including the JSON schema requirement.
+
+        Returns:
+            str: The fully constructed prompt for sub-question generation.
+        """
+        formatted_chunks = []
+        # Estimate tokens for the system template and the query part
+        current_tokens = self.estimate_tokens(system_template) + self.estimate_tokens(f"Original User Query: {original_query}\n\nInitial Code Context:")
+
+        logging.debug(f"Constructing sub-question prompt for query: {original_query[:100]}... with {len(initial_chunks)} initial chunks.")
+
+        for chunk in initial_chunks:
+            meta = chunk['meta']
+            # Use the default chunk template for formatting initial context
+            formatted_chunk = self.chunk_template.format(
+                file_path=meta.get('file_path', 'N/A'),
+                language=meta.get('language', 'unknown'),
+                chunk_type=meta.get('chunk_type', 'text'),
+                name=meta.get('name', ''),
+                parent_name=meta.get('parent_name', ''),
+                start_line=meta.get('start_line', 'N/A'),
+                end_line=meta.get('end_line', 'N/A'),
+                content=chunk.get('content', '')
+            )
+            chunk_tokens = self.estimate_tokens(formatted_chunk)
+
+            if current_tokens + chunk_tokens < self.max_prompt_tokens:
+                formatted_chunks.append(formatted_chunk)
+                current_tokens += chunk_tokens
+            else:
+                logging.warning(f"Stopped adding initial chunks to sub-question prompt due to max token limit. Max: {self.max_prompt_tokens}, Current: {current_tokens}, Chunk size: {chunk_tokens}")
+                break
+        
+        context_string = "\n\n".join(formatted_chunks)
+
+        subquestion_prompt = f"""{system_template}
+
+---
+Original User Query: {original_query}
+
+Initial Code Context:
+{context_string}
+
+---
+Based on the above, generate sub-questions as a JSON object.
+"""
+        logging.info(f"Sub-question prompt built (estimated {current_tokens} tokens, {len(formatted_chunks)} chunks included).")
+        return subquestion_prompt.strip()
