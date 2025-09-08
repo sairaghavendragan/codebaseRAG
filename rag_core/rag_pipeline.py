@@ -33,7 +33,7 @@ You will be provided with the original user query and an initial set of relevant
 Your goal is to generate 3-7 sub-questions that, if individually answered, would collectively provide a comprehensive and detailed answer to the original query.
 
 Follow these rules:
-1.  **Atomic Focus:** Each sub-question must focus on a single, distinct piece of information or a very specific concept. Avoid combining multiple ideas into one sub-question.
+1.  **Atomic Focus:** Each sub-question must be highly atomic. It must focus on a single, distinct piece of information or a very specific concept. Avoid combining multiple ideas into one sub-question.
 2.  **Actionable for Retrieval:** Formulate questions that can be directly used as search queries to retrieve relevant code snippets or documentation.
 3.  **Use Context:** Leverage the provided "Initial Code Context" to refine your sub-questions, making them more precise and relevant to the actual codebase content and terminology.
 4.  **Output Format:** Respond ONLY with a JSON object conforming to the following Pydantic schema:

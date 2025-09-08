@@ -6,6 +6,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 class PromptBuilder:
     DEFAULT_SYSTEM_TEMPLATE = """
 You are an AI assistant designed to answer questions about a codebase.
+You can be comprehensive and provide detailed answers to complex questions.
 You will be provided with a user's question and several relevant code snippets from the repository.
 Your task is to answer the question accurately and concisely, relying solely on the provided context.
 

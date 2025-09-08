@@ -7,7 +7,7 @@ from typing import Type, Optional
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class GeminiClient:
-    MODEL_NAME = "gemini-2.5-flash"
+    MODEL_NAME = "gemini-2.5-flash-lite"
     
     SAFETY_SETTINGS = [
         types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="BLOCK_NONE"),
