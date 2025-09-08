@@ -1,8 +1,8 @@
 # ingestion/test_ingestion.py (remains the same as before)
 
 # --- Configuration for Testing ---
-TEST_REPO_URL = "https://github.com/fastmail/Squire"
-TEST_REPO_NAME = "test-fastapi-repo"
+TEST_REPO_URL = "https://github.com/highcharts/highcharts"
+TEST_REPO_NAME = "test-highcharts-repo"
 
 # ingestion/test_ingestion.py (updated to call repo_processor)
 
