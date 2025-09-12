@@ -152,7 +152,7 @@ class TreeSitterCodeChunker(BaseChunker):
             
             top_level_nodes_buffer.clear()
 
-        def process_node(node: Node, parent_name: Optional[str] = None):
+        def process_node(node: Node, parent_name: Optional[str] = None, is_top_level: bool = False):
             nonlocal top_level_nodes_buffer
 
             for child in node.children:
@@ -162,52 +162,72 @@ class TreeSitterCodeChunker(BaseChunker):
                 chunk_type_candidate = self.NODE_TYPE_TO_CHUNK_TYPE.get(child.type)
                 
                 if chunk_type_candidate:
-                    flush_top_level_buffer()
+                    # If we find a semantic unit at the top level, flush previous top-level code.
+                    if is_top_level:
+                        flush_top_level_buffer()
 
                     node_name = self._get_node_name(child)
                     start_line_0_idx = child.start_point[0]
                     end_line_0_idx = child.end_point[0]
                     chunk_content = "\n".join(lines[start_line_0_idx : end_line_0_idx + 1])
+                    
+                    effective_parent_name = f"{parent_name}::{node_name}" if parent_name and node_name else node_name
 
                     if len(chunk_content) > self.chunk_size:
-                        # This semantic chunk is too large. Break it down.
+                        # Chunk is too large. Split it and DO NOT recurse into it.
                         temp_doc = {'content': chunk_content, 'meta': meta}
                         sub_chunks = self.generic_chunker.chunk(temp_doc)
                         for sub_chunk in sub_chunks:
                             sub_chunk['meta']['start_line'] += start_line_0_idx
                             sub_chunk['meta']['end_line'] += start_line_0_idx
-                            # Label it as a part of the original semantic unit
                             sub_chunk['meta']['chunk_type'] = f"{chunk_type_candidate}_part"
                             sub_chunk['meta']['language'] = self.language_str
-                            # Propagate the name and parent for context
                             sub_chunk['meta']['name'] = node_name
                             sub_chunk['meta']['parent_name'] = parent_name
                             all_chunks.append(sub_chunk)
                     else:
-                        # This semantic chunk is a good size.
+                        # Chunk is a good size. Create one chunk for it.
                         chunk_meta = self._create_base_chunk_meta(
-                            raw_doc_meta=meta,
-                            chunk_type=chunk_type_candidate,
-                            language=self.language_str,
-                            start_line=start_line_0_idx + 1,
-                            end_line=end_line_0_idx + 1,
-                            name=node_name,
-                            parent_name=parent_name
+                            raw_doc_meta=meta, chunk_type=chunk_type_candidate,
+                            language=self.language_str, start_line=start_line_0_idx + 1,
+                            end_line=end_line_0_idx + 1, name=node_name, parent_name=parent_name
                         )
                         all_chunks.append({'content': chunk_content, 'meta': chunk_meta})
-
-                    # Recursively process children to find nested definitions
-                    effective_parent_name = f"{parent_name}::{node_name}" if parent_name and node_name else node_name
-                    process_node(child, parent_name=effective_parent_name)
+                        
+                        # Recurse to find nested definitions, but mark it as not top-level.
+                        process_node(child, parent_name=effective_parent_name, is_top_level=False)
                 
-                else:
-                    # Not a major semantic unit, add to the buffer for top-level code.
+                elif is_top_level:
+                    # This is NOT a semantic unit, AND we are at the top level of the file.
+                    # Buffer it to be grouped with other top-level code.
                     top_level_nodes_buffer.append(child)
+                else:
+                    # This is NOT a semantic unit, but we are INSIDE another unit.
+                    # We must recurse into it to continue searching for nested definitions.
+                    # (e.g., we're in a class's body, looking for methods).
+                    process_node(child, parent_name=parent_name, is_top_level=False)
 
-        process_node(tree.root_node)
+        process_node(tree.root_node, is_top_level=True)
         flush_top_level_buffer()
 
         all_chunks.sort(key=lambda x: x['meta']['start_line'])
 
-        logging.info(f"Chunked {file_path} into {len(all_chunks)} Tree-sitter semantic chunks (language: {self.language_str}).")
-        return all_chunks
+        #logging.info(f"Chunked {file_path} into {len(all_chunks)} Tree-sitter semantic chunks (language: {self.language_str}).")
+        #return all_chunks
+        #i dont like this but this insurance is needed.. as iam getting into errors all of a sudden even after
+        # a lot of testing... the above code is very reslient but im adding this insurance just in case
+        final_chunks = []
+        seen_spans = set()
+        for chunk in all_chunks:
+            # Create a unique key for the chunk based on its content and position
+            span_key = (chunk['meta']['start_line'], chunk['meta']['end_line'] )
+            if span_key not in seen_spans:
+                final_chunks.append(chunk)
+                seen_spans.add(span_key)
+        
+         
+
+        logging.info(f"Chunked {file_path} into {len(final_chunks)} Tree-sitter semantic chunks (language: {self.language_str}).")
+        if len(final_chunks) != len(all_chunks):
+            logging.warning(f"Deduplicated {len(all_chunks) - len(final_chunks)} identical chunks in {file_path}.")
+        return final_chunks

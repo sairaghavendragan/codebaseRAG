@@ -1,5 +1,5 @@
 import logging
-from typing import List, Dict
+from typing import List, Dict,Tuple,Optional
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -7,6 +7,7 @@ class PromptBuilder:
     DEFAULT_SYSTEM_TEMPLATE = """
 You are an AI assistant designed to answer questions about a codebase.
 You can be comprehensive and provide detailed answers to complex questions.
+**You might also be provided with the conversation history.** Use this history to understand the ongoing context and refine your answer to be relevant to the current turn of conversation.
 You will be provided with a user's question and several relevant code snippets from the repository.
 Your task is to answer the question accurately and concisely, relying solely on the provided context.
 
@@ -43,11 +44,23 @@ Lines: {start_line}-{end_line}
     def estimate_tokens(text: str) -> int:
         """Rough token estimation: ~1 token ≈ 4 characters."""
         return len(text) // 4
+    def _format_chat_history(self, chat_history: List[Tuple[str, str]]) -> str:
+        """Formats chat history into a string for the prompt."""
+        if not chat_history:
+            return ""
+        
+        formatted_history = ["Conversation History:"]
+        for i, (q, a) in enumerate(chat_history):
+            formatted_history.append(f"User (Turn {i+1}): {q}")
+            formatted_history.append(f"Assistant (Turn {i+1}): {a}")
+        return "\n".join(formatted_history) + "\n\n"
 
-    def build_rag_prompt(self, query: str, retrieved_chunks: List[Dict]) -> str:
+    def build_rag_prompt(self, query: str, retrieved_chunks: List[Dict],chat_history: Optional[List[Tuple[str, str]]] = None) -> str:
         formatted_chunks = []
         current_tokens = self.estimate_tokens(self.system_template) + self.estimate_tokens(f"User Query: {query}\n\nRelevant Code Context:")
-
+        formatted_history_str = ""
+        if chat_history:
+            formatted_history_str = self._format_chat_history(chat_history)
         logging.debug(f"Constructing prompt for query: {query[:100]}... with {len(retrieved_chunks)} chunks.")
 
         for chunk in retrieved_chunks:
@@ -76,7 +89,7 @@ Lines: {start_line}-{end_line}
         final_prompt = f"""{self.system_template}
 
 ---
-User Query: {query}
+{formatted_history_str}User Query: {query}
 
 Relevant Code Context:
 {context_string}
@@ -89,16 +102,18 @@ Based on the provided context and your instructions, please answer the user's qu
         return final_prompt.strip()
     
 
-    def build_subquestion_prompt(self, original_query: str, initial_chunks: List[Dict], system_template: str) -> str:
+    def build_subquestion_prompt(self, original_query: str, initial_chunks: List[Dict], system_template: str, chat_history: Optional[List[Tuple[str, str]]] = None) -> str:
         """
         Builds a prompt for Gemini to generate sub-questions, providing the original query
         and an initial set of relevant chunks as context.
+        Optionally includes chat history for contextual awareness.
 
         Args:
             original_query (str): The initial user query.
             initial_chunks (List[Dict]): A list of chunks retrieved from the first pass.
             system_template (str): The system instructions for sub-question generation,
                                    including the JSON schema requirement.
+            chat_history (Optional[List[Tuple[str, str]]]): Previous conversation turns.
 
         Returns:
             str: The fully constructed prompt for sub-question generation.
@@ -107,7 +122,13 @@ Based on the provided context and your instructions, please answer the user's qu
         # Estimate tokens for the system template and the query part
         current_tokens = self.estimate_tokens(system_template) + self.estimate_tokens(f"Original User Query: {original_query}\n\nInitial Code Context:")
 
-        logging.debug(f"Constructing sub-question prompt for query: {original_query[:100]}... with {len(initial_chunks)} initial chunks.")
+        # Add chat history if available
+        formatted_history_str = ""
+        if chat_history:
+            formatted_history_str = self._format_chat_history(chat_history)
+            current_tokens += self.estimate_tokens(formatted_history_str)
+
+        logging.debug(f"Constructing sub-question prompt for query: {original_query[:100]}... with {len(initial_chunks)} initial chunks. History present: {bool(chat_history)}.")
 
         for chunk in initial_chunks:
             meta = chunk['meta']
@@ -136,7 +157,7 @@ Based on the provided context and your instructions, please answer the user's qu
         subquestion_prompt = f"""{system_template}
 
 ---
-Original User Query: {original_query}
+{formatted_history_str}Original User Query: {original_query}
 
 Initial Code Context:
 {context_string}

@@ -1,8 +1,8 @@
 # ingestion/test_ingestion.py (remains the same as before)
 
 # --- Configuration for Testing ---
-TEST_REPO_URL = "https://github.com/highcharts/highcharts"
-TEST_REPO_NAME = "test-highcharts-repo"
+TEST_REPO_URL = "https://github.com/eslint/eslint"
+TEST_REPO_NAME = "test-lodash-repo"
 
 # ingestion/test_ingestion.py (updated to call repo_processor)
 
@@ -35,11 +35,20 @@ def run_full_ingestion_test():
 
             from collections import defaultdict
             chunk_type_counts = defaultdict(int)
+            chunk_file_counts = defaultdict(int)
             for chunk in semantic_chunks:
                 chunk_type_counts[chunk['meta']['chunk_type']] += 1
             print("\n--- Chunk Type Counts ---")
             for ctype, count in sorted(chunk_type_counts.items()):
                 print(f"  {ctype}: {count} chunks")
+            for chunk in semantic_chunks:
+                chunk_file_counts[chunk['meta']['file_path']] += 1
+            print("\n--- Chunk Type Counts ---")
+            '''for ctype, count in sorted(chunk_file_counts.items()):
+                print(f"  {ctype}: {count} chunks")    '''
+            for chunk in semantic_chunks:
+                if chunk['meta']['file_path'] == 'docs/en/docs/js/custom.js' :  
+                    print(f"{chunk['meta']} :{chunk ['content'][:100]}")  
 
         else:
             print("\nNo semantic chunks generated or an error occurred. Check logs above.")

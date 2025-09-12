@@ -2,7 +2,7 @@
 
 import re
 import logging
-from typing import List, Dict, Any, Callable, Set, Optional # Added Set, Optional
+from typing import List, Dict, Any, Callable, Set, Optional,Tuple
 from pydantic import BaseModel, Field # NEW: For structured sub-questions
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -30,13 +30,15 @@ class RAGPipeline:
     SUBQUESTION_GENERATION_SYSTEM_PROMPT = """
 You are an AI assistant tasked with breaking down a complex user query about a codebase into more **atomic, specific, and actionable** sub-questions.
 You will be provided with the original user query and an initial set of relevant code snippets.
+Crucially, you might also be provided with **previous conversation history**. Use this history to understand the user's intent, identify follow-up aspects, and avoid generating redundant sub-questions.
 Your goal is to generate 3-7 sub-questions that, if individually answered, would collectively provide a comprehensive and detailed answer to the original query.
 
 Follow these rules:
 1.  **Atomic Focus:** Each sub-question must be highly atomic. It must focus on a single, distinct piece of information or a very specific concept. Avoid combining multiple ideas into one sub-question.
 2.  **Actionable for Retrieval:** Formulate questions that can be directly used as search queries to retrieve relevant code snippets or documentation.
 3.  **Use Context:** Leverage the provided "Initial Code Context" to refine your sub-questions, making them more precise and relevant to the actual codebase content and terminology.
-4.  **Output Format:** Respond ONLY with a JSON object conforming to the following Pydantic schema:
+4.  **Consider History:** If "Conversation History" is provided, use it to understand the ongoing context. **Do not repeat questions or seek information already covered in the history.** Focus on advancing the conversation or clarifying previous points.
+5.  **Output Format:** Respond ONLY with a JSON object conforming to the following Pydantic schema:
     ```json
     {
       "subquestions": ["sub-question 1", "sub-question 2", ...]
@@ -137,7 +139,7 @@ Desired Sub-questions (JSON):
         return initial_chunks
 
     # NEW: Helper method to generate sub-questions using Gemini's structured output
-    def _generate_subquestions(self, original_query: str, initial_chunks: List[Dict]) -> List[str]:
+    def _generate_subquestions(self, original_query: str, initial_chunks: List[Dict],chat_history: Optional[List[Tuple[str, str]]]) -> List[str]:
         """
         Uses Gemini to generate structured sub-questions based on the original query
         and an initial set of retrieved chunks.
@@ -148,7 +150,8 @@ Desired Sub-questions (JSON):
         subquestion_prompt_text = self.prompt_builder.build_subquestion_prompt(
             original_query=original_query,
             initial_chunks=initial_chunks,
-            system_template=self.SUBQUESTION_GENERATION_SYSTEM_PROMPT
+            system_template=self.SUBQUESTION_GENERATION_SYSTEM_PROMPT,
+            chat_history=chat_history
         )
 
         # Call Gemini with the structured response schema
@@ -196,7 +199,8 @@ Desired Sub-questions (JSON):
         query: str,
         top_k_retrieval: int = 3,
         context_expansion_factor: int = 0,
-        use_two_pass_rag: bool = False # NEW: Parameter to enable/disable two-pass
+        use_two_pass_rag: bool = False ,
+        chat_history: Optional[List[Tuple[str, str]]] = None 
     ) -> Dict[str, Any]:
         """
         Runs the RAG pipeline: retrieval, prompt building, LLM call, and source extraction.
@@ -241,7 +245,7 @@ Desired Sub-questions (JSON):
         if use_two_pass_rag:
             logging.info("Two-pass RAG enabled. Generating sub-questions.")
             # Generate sub-questions using Gemini, informed by initial chunks
-            subquestions = self._generate_subquestions(query, initial_chunks)
+            subquestions = self._generate_subquestions(query, initial_chunks,chat_history=chat_history)
             
             if subquestions:
                 # Add sub-questions to the list of queries to run
@@ -280,7 +284,7 @@ Desired Sub-questions (JSON):
 
         # Step 3: Build final prompt
         try:
-            prompt = self.prompt_builder.build_rag_prompt(query, context_chunks)
+            prompt = self.prompt_builder.build_rag_prompt(query, context_chunks,chat_history)
         except Exception as e:
             logging.error(f"Final prompt building failed: {e}")
             return {'query': query, 'answer': f"Prompt building failed: {e}", 'sources': []}

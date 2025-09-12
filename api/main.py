@@ -4,7 +4,7 @@ import os
 import sys
 import logging
 from contextlib import asynccontextmanager  # Changed from asynccontextmanager
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional,Tuple
 
 from fastapi import FastAPI, HTTPException, status,BackgroundTasks
 from pydantic import BaseModel, Field
@@ -19,6 +19,7 @@ from vector_store.chroma_manager import ChromaManager
 from rag_core.gemini_client import GeminiClient
 from rag_core.prompt_builder import PromptBuilder
 from rag_core.rag_pipeline import RAGPipeline
+from rag_core.chat_manager import ChatManager
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -61,7 +62,13 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.critical(f"Failed to initialize PromptBuilder: {e}")
         raise
-
+    try:
+      
+        app.state.chat_manager = ChatManager()
+        logger.info("ChatManager initialized.")
+    except Exception as e:
+        logger.critical(f"Failed to initialize ChatManager: {e}")
+        raise     
     try:
         app.state.rag_pipeline = RAGPipeline(
             chroma_manager=app.state.chroma_manager,
@@ -106,6 +113,7 @@ class QueryCodebaseRequest(BaseModel):
     top_k: Optional[int] = Field(None, ge=3, description="Number of top chunks to retrieve.")
     use_two_pass_rag: bool = Field(True, description="Whether to use the two-pass RAG strategy " \
                                     "for enhanced query understanding and retrieval.") # NEW FIELD
+    conversation_id: Optional[str] = Field(None, description="Optional ID for maintaining conversation history.")
 
 class SourceReference(BaseModel):
     file_path: str = Field(..., example="src/main.py")
@@ -116,6 +124,11 @@ class QueryCodebaseResponse(BaseModel):
     query: str = Field(..., example="How do I define a path operation with a Pydantic model?")
     answer: str = Field(..., example="You can define a path operation with a Pydantic model by...")
     sources: List[SourceReference] = Field(...)
+    conversation_id: Optional[str] = Field(None, description="The ID of the conversation this response belongs to.")
+
+class NewChatSessionResponse(BaseModel):
+    conversation_id: str = Field(..., example="a1b2c3d4-e5f6-7890-1234-567890abcdef")
+    message: str = Field("New chat session created.", example="New chat session created.")    
 
 
 # --- API Endpoints (all made synchronous) ---
@@ -162,7 +175,7 @@ def ingest_repo_endpoint(request: IngestRepoRequest, background_tasks: Backgroun
 
 @app.post("/query-codebase", response_model=QueryCodebaseResponse)
 def query_codebase_endpoint(request: QueryCodebaseRequest):
-    logger.info(f"Received query for repo '{request.repo_name}': '{request.query[:100]}...' (Two-pass RAG: {request.use_two_pass_rag})") # Updated log
+    logger.info(f"Received query for repo '{request.repo_name}': '{request.query[:100]}...' (Two-pass RAG: {request.use_two_pass_rag}, Conversation ID: {request.conversation_id})") # Updated log with conversation ID
     try:
         if request.repo_name not in app.state.chroma_manager.list_collections():
             raise HTTPException(
@@ -170,11 +183,18 @@ def query_codebase_endpoint(request: QueryCodebaseRequest):
                 detail=f"Repository '{request.repo_name}' not found. Please ingest it first."
             )
 
+        # NEW: Retrieve chat history if conversation_id is provided
+        chat_history: Optional[List[Tuple[str, str]]] = None
+        if request.conversation_id:
+            chat_history = app.state.chat_manager.get_history(request.conversation_id)
+            logger.debug(f"Retrieved chat history for '{request.conversation_id}': {len(chat_history)} entries.")
+
         rag_result = app.state.rag_pipeline.run(
             repo_name=request.repo_name,
             query=request.query,
-            top_k_retrieval=request.top_k or app.state.default_top_k_retrieval,
-            use_two_pass_rag=request.use_two_pass_rag
+            top_k_retrieval=request.top_k or app.state.settings.default_top_k_retrieval, 
+            use_two_pass_rag=request.use_two_pass_rag,
+            chat_history=chat_history  
         )
 
         if "I could not find any relevant information" in rag_result['answer']:
@@ -183,10 +203,16 @@ def query_codebase_endpoint(request: QueryCodebaseRequest):
                 detail=rag_result['answer']
             )
 
+        # NEW: Add current query and answer to chat history
+        if request.conversation_id:
+            app.state.chat_manager.add_message(request.conversation_id, request.query, rag_result['answer'])
+
+
         return QueryCodebaseResponse(
             query=rag_result['query'],
             answer=rag_result['answer'],
-            sources=rag_result['sources']
+            sources=rag_result['sources'],
+            conversation_id=request.conversation_id # Return the conversation ID
         )
     except HTTPException as e:
         raise
@@ -222,6 +248,38 @@ def delete_repo_endpoint(repo_name: str):
     except Exception as e:
         logger.error(f"Delete error for repo '{repo_name}': {e}", exc_info=True)
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Delete error: {e}")
+
+@app.post("/chat/new-session", response_model=NewChatSessionResponse, summary="Create a new chat conversation session")
+def create_new_chat_session_endpoint():
+    """
+    Creates a new, unique conversation ID and initializes an empty history for it on the backend.
+    This ID should be used by the client for subsequent queries in this conversation.
+    """
+    try:
+        conversation_id = app.state.chat_manager.create_session()
+        return NewChatSessionResponse(conversation_id=conversation_id)
+    except Exception as e:
+        logger.error(f"Error creating new chat session: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error creating new chat session: {e}")  
+
+@app.delete("/chat/clear/{conversation_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Clear a specific conversation history")
+def clear_chat_history_endpoint(conversation_id: str):
+    logger.info(f"Received request to clear chat history for conversation: {conversation_id}")
+    try:
+        app.state.chat_manager.clear_history(conversation_id)
+        return
+    except Exception as e:
+        logger.error(f"Error clearing chat history for '{conversation_id}': {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error clearing chat history: {e}")
+
+@app.get("/chat/list", response_model=List[str], summary="List all active conversation IDs")
+def list_chat_conversations_endpoint():
+    logger.info("Received request to list active chat conversations.")
+    try:
+        return app.state.chat_manager.list_conversations()
+    except Exception as e:
+        logger.error(f"Error listing chat conversations: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"Error listing chat conversations: {e}")    
 
 
 # --- Uvicorn entry point ---
