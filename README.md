@@ -18,49 +18,7 @@ This project leverages a sophisticated **Retrieval-Augmented Generation (RAG)** 
 -   **Interactive Web UI**: A clean and simple interface built with Streamlit for easy interaction.
 -   **Scalable Backend**: Built with FastAPI, featuring asynchronous background tasks for repository ingestion.
 
-## 🏗️ Architecture
-
-The project is composed of a Streamlit frontend and a FastAPI backend, which orchestrates the entire RAG pipeline.
-
-```mermaid
-graph TD
-    subgraph User Interface
-        A[Streamlit Frontend]
-    end
-
-    subgraph Backend API (FastAPI)
-        B[API Endpoints]
-        C[RAG Pipeline Core]
-        D[Ingestion Processor]
-        E[Chat Manager]
-    end
-
-    subgraph Data & AI Services
-        F[Google Gemini LLM]
-        G[ChromaDB Vector Store]
-    end
-
-    subgraph External
-        H[GitHub Repository]
-    end
-
-    %% Interactions
-    A -- HTTP Requests --> B;
-
-    B -- "Ingest Repo" --> D;
-    D -- 1. Download --> H;
-    D -- 2. Parse & Chunk (Tree-sitter) --> I{Semantic Chunks};
-    I -- 3. Store & Embed --> G;
-
-    B -- "Ask Question" --> C;
-    C -- Manages History --> E;
-    C -- 4a. (Two-Pass) Generate Sub-Questions --> F;
-    C -- 4b. Retrieve Chunks --> G;
-    C -- 5. Build Prompt --> F;
-    F -- 6. Generate Answer --> C;
-    C -- Returns Answer & Sources --> B;
-    B -- Sends Response --> A;
-```
+ 
 
 ## 🛠️ Tech Stack
 
