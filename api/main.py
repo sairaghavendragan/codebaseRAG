@@ -7,6 +7,7 @@ from contextlib import asynccontextmanager  # Changed from asynccontextmanager
 from typing import List, Dict, Any, Optional,Tuple
 
 from fastapi import FastAPI, HTTPException, status,BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import uvicorn
 
@@ -93,6 +94,13 @@ app = FastAPI(
     description="An AI-powered assistant that answers questions about Git repository source code.",
     version="0.1.0",
     lifespan=lifespan 
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Replace with specific origins in production
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
  
 
@@ -285,4 +293,4 @@ def list_chat_conversations_endpoint():
 # --- Uvicorn entry point ---
 
 if __name__ == "__main__":
-    uvicorn.run("api.main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("api.main:app", host="0.0.0.0", port=8000, reload=False)
